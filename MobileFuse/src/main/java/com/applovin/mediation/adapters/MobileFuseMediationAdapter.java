@@ -56,8 +56,11 @@ public class MobileFuseMediationAdapter
     private static       InitializationStatus initializationStatus;
 
     private MobileFuseInterstitialAd interstitialAd;
+    private boolean                  interstitialAdExpired;
     private MobileFuseRewardedAd     rewardedAd;
+    private boolean                  rewardedAdExpired;
     private MobileFuseBannerAd       adView;
+    private boolean                  adViewExpired;
     private MobileFuseNativeAd       nativeAd;
 
     public MobileFuseMediationAdapter(final AppLovinSdk sdk) { super( sdk ); }
@@ -181,6 +184,7 @@ public class MobileFuseMediationAdapter
 
         updatePrivacyPreferences( parameters );
 
+        interstitialAdExpired = false;
         interstitialAd = new MobileFuseInterstitialAd( getContext( activity ), placementId );
         interstitialAd.setListener( new InterstitialAdListener( listener ) );
         interstitialAd.loadAdFromBiddingToken( parameters.getBidResponse() );
@@ -191,15 +195,28 @@ public class MobileFuseMediationAdapter
     {
         log( "Showing interstitial ad: " + parameters.getThirdPartyAdPlacementId() );
 
-        if ( !interstitialAd.isLoaded() )
+        final MobileFuseInterstitialAd interstitialAd = this.interstitialAd;
+        if ( interstitialAd == null )
         {
             log( "Unable to show interstitial - ad not ready" );
             listener.onInterstitialAdDisplayFailed( new MaxAdapterError( -4205, "Ad Display Failed", 0, "Interstitial ad not ready" ) );
-
             return;
         }
 
-        interstitialAd.showAd();
+        if ( interstitialAd.isLoaded() )
+        {
+            interstitialAd.showAd();
+        }
+        else if ( interstitialAdExpired )
+        {
+            log( "Unable to show interstitial - ad expired" );
+            listener.onInterstitialAdDisplayFailed( MaxAdapterError.AD_EXPIRED );
+        }
+        else
+        {
+            log( "Unable to show interstitial - ad not ready" );
+            listener.onInterstitialAdDisplayFailed( new MaxAdapterError( -4205, "Ad Display Failed", 0, "Interstitial ad not ready" ) );
+        }
     }
 
     //endregion
@@ -215,6 +232,7 @@ public class MobileFuseMediationAdapter
 
         updatePrivacyPreferences( parameters );
 
+        rewardedAdExpired = false;
         rewardedAd = new MobileFuseRewardedAd( getContext( activity ), placementId );
         rewardedAd.setListener( new RewardedAdListener( listener ) );
         rewardedAd.loadAdFromBiddingToken( parameters.getBidResponse() );
@@ -225,17 +243,30 @@ public class MobileFuseMediationAdapter
     {
         log( "Showing rewarded ad: " + parameters.getThirdPartyAdPlacementId() );
 
-        if ( !rewardedAd.isLoaded() )
+        final MobileFuseRewardedAd rewardedAd = this.rewardedAd;
+        if ( rewardedAd == null )
         {
             log( "Unable to show rewarded ad - ad not ready" );
             listener.onRewardedAdDisplayFailed( new MaxAdapterError( -4205, "Ad Display Failed", 0, "Rewarded ad not ready" ) );
-
             return;
         }
 
-        configureReward( parameters );
+        if ( rewardedAd.isLoaded() )
+        {
+            configureReward( parameters );
 
-        rewardedAd.showAd();
+            rewardedAd.showAd();
+        }
+        else if ( rewardedAdExpired )
+        {
+            log( "Unable to show rewarded ad - ad expired" );
+            listener.onRewardedAdDisplayFailed( MaxAdapterError.AD_EXPIRED );
+        }
+        else
+        {
+            log( "Unable to show rewarded ad - ad not ready" );
+            listener.onRewardedAdDisplayFailed( new MaxAdapterError( -4205, "Ad Display Failed", 0, "Rewarded ad not ready" ) );
+        }
     }
 
     //endregion
@@ -260,6 +291,7 @@ public class MobileFuseMediationAdapter
         }
         else
         {
+            adViewExpired = false;
             adView = new MobileFuseBannerAd( getContext( activity ), placementId, toAdSize( adFormat ) );
             adView.setListener( new AdViewAdListener( listener ) );
             adView.setAutorefreshEnabled( false );
@@ -409,6 +441,7 @@ public class MobileFuseMediationAdapter
         public void onAdExpired()
         {
             log( "Interstitial ad expired" );
+            interstitialAdExpired = true;
         }
 
         @Override
@@ -480,6 +513,7 @@ public class MobileFuseMediationAdapter
         public void onAdExpired()
         {
             log( "Rewarded ad expired" );
+            rewardedAdExpired = true;
         }
 
         @Override
@@ -537,7 +571,7 @@ public class MobileFuseMediationAdapter
     }
 
     private class AdViewAdListener
-            implements MobileFuseBannerAd.Listener
+            extends MobileFuseBannerAd.ExtListener
     {
         private final MaxAdViewAdapterListener listener;
 
@@ -564,6 +598,17 @@ public class MobileFuseMediationAdapter
         public void onAdExpired()
         {
             log( "AdView ad expired" );
+            adViewExpired = true;
+        }
+
+        @Override
+        public void onAdViewAttached()
+        {
+            log( "AdView ad attached to view hierarchy" );
+            if ( adViewExpired )
+            {
+                listener.onAdViewAdDisplayFailed( MaxAdapterError.AD_EXPIRED );
+            }
         }
 
         @Override
